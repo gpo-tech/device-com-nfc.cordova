@@ -1,5 +1,7 @@
 import Cordova
 import Cordova
+import Cordova
+import Cordova
 //
 //  IOS15Reader.swift
 //  NFC
@@ -252,15 +254,15 @@ extension ST25DVReader {
         tag?.writeSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, dataBlock: data, completionHandler: completed)
     }
 
-    func readMultipleBlocks(from: Int, to: Int, completed: @escaping ([Data], Error?)->()) throws {
+    func readMultipleBlocks(from: Int, numberOfBlocks: Int, completed: @escaping ([Data], Error?)->()) throws {
         guard #available(iOS 14.0, *) else {
             throw NfcCustomError.oldVersionError("Can not be used in iOS < 14.0")
         }
-        tag?.readMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: to - from), completionHandler: completed)
+        tag?.readMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSMakeRange(from, numberOfBlocks), completionHandler: completed)
     }
 
-    func writeMultipleBlocks(from: Int, to: Int, dataBlocks: [Data], completed: @escaping (Error?)->()) {
-        tag?.writeMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: to - from), dataBlocks: dataBlocks, completionHandler: completed)
+    func writeMultipleBlocks(from: Int, numberOfBlocks: Int, dataBlocks: [Data], completed: @escaping (Error?)->()) {
+        tag?.writeMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: numberOfBlocks), dataBlocks: dataBlocks, completionHandler: completed)
     }
 
     func readResponse( nbTry: Int, completed: @escaping (Data?, Error?)->() ) {

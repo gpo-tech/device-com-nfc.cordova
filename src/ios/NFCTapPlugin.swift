@@ -1,5 +1,9 @@
 import Cordova
 import Cordova
+import Cordova
+import Cordova
+import Cordova
+import Cordova
 //
 //  NFCTapPlugin.swift
 //  NFC
@@ -147,6 +151,32 @@ import CoreNFC
         }
     }
 
+    func performResponse(command: CDVInvokedUrlCommand, response: Data?, error: Error?) -> Void {
+        DispatchQueue.main.async {
+            if error != nil {
+                self.lastError = error
+                self.sendError(command: command, result: error!.localizedDescription)
+            } else {
+                print("responded \(response!.hexEncodedString())")
+                self.sendSuccess(command: command, result: response!.hexEncodedString())
+            }
+        }
+    }
+
+    func performArrayResponse(command: CDVInvokedUrlCommand, response: [Data], error: Error?) -> Void {
+        DispatchQueue.main.async {
+            if error != nil {
+                self.lastError = error
+                self.sendError(command: command, result: error!.localizedDescription)
+            } else {
+                let respArray = flattenedArray(array: response)
+                let respData = Data(bytes: respArray, count: respArray.count)
+                print("responded \(response) : \(respArray) : \(respData.hexEncodedString())")
+                self.sendSuccess(command: command, result: respData.hexEncodedString())
+            }
+        }
+    }
+
     func transceiveDispatcher(command: CDVInvokedUrlCommand) -> Bool {
         guard #available(iOS 13.0, *) else {
             sendError(command: command, result: "Those commands are only available on iOS 13+")
@@ -168,114 +198,80 @@ import CoreNFC
         let commandCode = array[1]
         switch commandCode {
             case "20":
-                print("read single block")
-                if let blockNumberStr = array.last {
-                    if let blockNumber = UInt(blockNumberStr) {
-                        print("Recognized blockNumber: \(blockNumber)")
-                        (self.nfcController as! ST25DVReader).readSingleBlock(blockNumber: UInt8(blockNumber), completed: {
-                            (response: Data?, error: Error?) -> Void in
-
-                            DispatchQueue.main.async {
-                                if error != nil {
-                                    self.lastError = error
-                                    self.sendError(command: command, result: error!.localizedDescription)
-                                } else {
-                                    print("responded \(response!.hexEncodedString())")
-                                    self.sendSuccess(command: command, result: response!.hexEncodedString())
-                                }
-                            }
-                        })
-                        return true
-                    }
+                if let blockNumberStr = array.last, let blockNumber = UInt(blockNumberStr, radix: 16) {
+                    print("Read single block, Recognized blockNumber: \(blockNumber)")
+                    (self.nfcController as! ST25DVReader).readSingleBlock(blockNumber: UInt8(blockNumber), completed: {
+                        (response: Data?, error: Error?) -> Void in
+                        self.performResponse(command: command, response: response, error: error)
+                    })
+                    return true
                 }
 
             case "21":
-                print("read single block")
-                if let blockNumberStr = array.last {
-                    if let blockNumber = UInt(blockNumberStr) {
-                        print("Recognized blockNumber: \(blockNumber)")
-                        (self.nfcController as! ST25DVReader).readSingleBlock(blockNumber: UInt8(blockNumber), completed: {
-                            (response: Data?, error: Error?) -> Void in
+                print("Write single block")
+                if let startBlock = UInt8(array[10], radix: 16) {
+                        print("Recognized blockNumber: \(startBlock)")
+                    let prepared = array[11...].map({
+                        (n: String) -> UInt8 in
+                        return UInt8(n, radix: 16) ?? 0
+                    })
 
-                            DispatchQueue.main.async {
-                                if error != nil {
-                                    self.lastError = error
-                                    self.sendError(command: command, result: error!.localizedDescription)
-                                } else {
-                                    print("responded \(response!.hexEncodedString())")
-                                    self.sendSuccess(command: command, result: response!.hexEncodedString())
-                                }
-                            }
+                        (self.nfcController as! ST25DVReader).writeSingleBlock(blockNumber: startBlock, data: Data(prepared), completed: {
+                            (error: Error?) -> Void in
+                            self.performResponse(command: command, response: "00".data(using: .utf8)!, error: error)
                         })
                         return true
-                    }
                 }
 
             case "23":
                 print("read multiples blocks")
-                if let numberOfBlocksStr = array.last {
-                    let startBlockStr = array[array.count - 2]
-                    if let numberOfBlocks = Int(numberOfBlocksStr), let startBlock = Int(startBlockStr) {
-                        print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks)")
-                        do {
-                            try (self.nfcController as! ST25DVReader).readMultipleBlocks(from: startBlock, to: startBlock + numberOfBlocks, completed: {
-                                (response: [Data], error: Error?) -> Void in
+                if let numberOfBlocksStr = array.last, let numberOfBlocks = Int(numberOfBlocksStr, radix: 16), let startBlock = Int(array[array.count - 2], radix: 16) {
+                    print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks)")
+                    do {
+                        try (self.nfcController as! ST25DVReader).readMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, completed: {
+                            (response: [Data], error: Error?) -> Void in
+                            print("Response after read multiple blocks: \(response), error: \(error)")
+                            self.performArrayResponse(command: command, response: response, error: error)
+                        })
+                        return true
 
-                                DispatchQueue.main.async {
-                                    if error != nil {
-                                        self.lastError = error
-                                        self.sendError(command: command, result: error!.localizedDescription)
-                                    } else {
-                                        let respArray = flattenedArray(array: response)
-                                        let respData = Data(bytes: respArray, count: respArray.count)
-                                        print("responded \(respData.hexEncodedString())")
-                                        self.sendSuccess(command: command, result: respData.hexEncodedString())
-                                    }
-                                }
-                            })
-                            return true
-
-                        } catch NfcCustomError.oldVersionError(let errorMessage) {
-                            print("Error: \(errorMessage)")
-                        } catch {
-                            print("Error: not recognized")
-                        }
-
+                    } catch NfcCustomError.oldVersionError(let errorMessage) {
+                        print("Error: \(errorMessage)")
+                    } catch {
+                        print("Error: not recognized")
                     }
                 }
 
             case "24":
                 print("write multiples blocks")
-                if let numberOfBlocksStr = array.last {
-                    let startBlockStr = array[array.count - 2]
-                    if let numberOfBlocks = Int(numberOfBlocksStr), let startBlock = Int(startBlockStr) {
-                        print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks)")
-                        do {
-                            try (self.nfcController as! ST25DVReader).readMultipleBlocks(from: startBlock, to: startBlock + numberOfBlocks, completed: {
-                                (response: [Data], error: Error?) -> Void in
+                if let startBlock = Int(array[10], radix: 16), let numberOfBlocks = Int(array[11], radix: 16) {
+                    print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks), \(array[12...])")
+                    let prepared = array[12...].map({
+                        (n: String) -> UInt8 in
+//                        withUnsafeBytes(of: ) { Data($0) }
+                        UInt8(n, radix: 16) ?? 0
+                    })
+                    .chunked(into: 4)
+                    .map({
+                        (arr: [UInt8]) -> Data in
+                        Data(arr)
+                    })
+                    print("Prepared data: \(prepared)")
+                    do {
+                        try (self.nfcController as! ST25DVReader).writeMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, dataBlocks: prepared, completed: {
+                            (error: Error?) -> Void in
+                            self.performArrayResponse(command: command, response: ["00".data(using: .utf8)!], error: error)
+                        })
+                        return true
 
-                                DispatchQueue.main.async {
-                                    if error != nil {
-                                        self.lastError = error
-                                        self.sendError(command: command, result: error!.localizedDescription)
-                                    } else {
-                                        let respArray = flattenedArray(array: response)
-                                        let respData = Data(bytes: respArray, count: respArray.count)
-                                        print("responded \(respData.hexEncodedString())")
-                                        self.sendSuccess(command: command, result: respData.hexEncodedString())
-                                    }
-                                }
-                            })
-                            return true
-
-                        } catch NfcCustomError.oldVersionError(let errorMessage) {
-                            print("Error: \(errorMessage)")
-                        } catch {
-                            print("Error: not recognized")
-                        }
-
+                    } catch NfcCustomError.oldVersionError(let errorMessage) {
+                        print("Error: \(errorMessage)")
+                    } catch {
+                        print("Error: not recognized")
                     }
                 }
+
+
             default:
                 return false
 
@@ -408,19 +404,18 @@ extension String {
     }
 }
 
-func flattenedArray(array:[Any]) -> [UInt8] {
+func flattenedArray(array:[Data]) -> [UInt8] {
     var myArray = [UInt8]()
     for element in array {
-        if let element = element as? Int {
-            myArray.append(UInt8(element))
-        }
-        if let element = element as? [Any] {
-            let result = flattenedArray(array: element)
-            for i in result {
-                myArray.append(i)
-            }
-
-        }
+        myArray.append(contentsOf: element)
     }
     return myArray
+}
+
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
+    }
 }
