@@ -4,6 +4,8 @@ import Cordova
 import Cordova
 import Cordova
 import Cordova
+import Cordova
+import Cordova
 //
 //  NFCTapPlugin.swift
 //  NFC
@@ -197,6 +199,42 @@ import CoreNFC
         let array = request.split(by: 2)
         let commandCode = array[1]
         switch commandCode {
+            case "A0", "A9":
+                if let commandInt = Int(commandCode, radix: 16), let pointer = UInt(array.last ?? "00", radix: 16) {
+                    (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandInt, request: Data([UInt8(pointer)]), completed: {
+                        (response: Data?, error: Error?) -> Void in
+
+                        DispatchQueue.main.async {
+                            if error != nil {
+                                self.lastError = error
+                                self.sendError(command: command, result: error!.localizedDescription)
+                            } else {
+                                print("responded \(response!.hexEncodedString())")
+                                self.sendSuccess(command: command, result: response!.hexEncodedString())
+                            }
+                        }
+                    })
+                    return true
+                }
+
+            case "A1":
+                if let pointer = UInt(array.last ?? "00", radix: 16), let regValue = UInt(array[array.count - 2], radix: 16) {
+                    (self.nfcController as! ST25DVReader).sendCustomCommand(command: 0xA1, request: Data([UInt8(pointer), UInt8(regValue)]), completed: {
+                        (response: Data?, error: Error?) -> Void in
+
+                        DispatchQueue.main.async {
+                            if error != nil {
+                                self.lastError = error
+                                self.sendError(command: command, result: error!.localizedDescription)
+                            } else {
+                                print("responded \(response!.hexEncodedString())")
+                                self.sendSuccess(command: command, result: response!.hexEncodedString())
+                            }
+                        }
+                    })
+                    return true
+                }
+
             case "20":
                 if let blockNumberStr = array.last, let blockNumber = UInt(blockNumberStr, radix: 16) {
                     print("Read single block, Recognized blockNumber: \(blockNumber)")

@@ -2,6 +2,8 @@ import Cordova
 import Cordova
 import Cordova
 import Cordova
+import Cordova
+import Cordova
 //
 //  IOS15Reader.swift
 //  NFC
@@ -243,6 +245,25 @@ extension ST25DVReader {
                     usleep(ST25DVReader.DELAY * 10) // free ST25DV for SPI
                     self.readResponse( nbTry: nbTry , completed: completed)
             })
+
+    }
+
+
+    func sendCustomCommand(command: Int, request: Data, completed: @escaping (Data?, Error?)->() ) {
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(nil, error )
+            return;
+        }
+
+        var parameters  = Data( bytes:[request.count - 1], count: 1 )
+        parameters.append(request)
+        print( "Send - \(parameters.hexEncodedString())" )
+        tag.customCommand(requestFlags: [.highDataRate],
+                          customCommandCode: command,
+            customRequestParameters:  parameters,
+            completionHandler: completed)
 
     }
 
