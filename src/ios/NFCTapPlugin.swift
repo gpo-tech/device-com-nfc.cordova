@@ -1,11 +1,4 @@
 import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
 //
 //  NFCTapPlugin.swift
 //  NFC
@@ -195,124 +188,106 @@ import CoreNFC
         if (request.lengthOfBytes(using: String.Encoding.utf8) < 4) {
             return false
         }
-
+        usleep(ST25DVReader.DELAY)
         let array = request.split(by: 2)
-        let commandCode = array[1]
-        switch commandCode {
-            case "A0", "A9":
-                if let commandInt = Int(commandCode, radix: 16), let pointer = UInt(array.last ?? "00", radix: 16) {
-                    (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandInt, request: Data([UInt8(pointer)]), completed: {
-                        (response: Data?, error: Error?) -> Void in
-
-                        DispatchQueue.main.async {
-                            if error != nil {
-                                self.lastError = error
-                                self.sendError(command: command, result: error!.localizedDescription)
-                            } else {
-                                print("responded \(response!.hexEncodedString())")
-                                self.sendSuccess(command: command, result: response!.hexEncodedString())
-                            }
-                        }
-                    })
-                    return true
-                }
-
-            case "A1":
-                if let pointer = UInt(array.last ?? "00", radix: 16), let regValue = UInt(array[array.count - 2], radix: 16) {
-                    (self.nfcController as! ST25DVReader).sendCustomCommand(command: 0xA1, request: Data([UInt8(pointer), UInt8(regValue)]), completed: {
-                        (response: Data?, error: Error?) -> Void in
-
-                        DispatchQueue.main.async {
-                            if error != nil {
-                                self.lastError = error
-                                self.sendError(command: command, result: error!.localizedDescription)
-                            } else {
-                                print("responded \(response!.hexEncodedString())")
-                                self.sendSuccess(command: command, result: response!.hexEncodedString())
-                            }
-                        }
-                    })
-                    return true
-                }
-
-            case "20":
-                if let blockNumberStr = array.last, let blockNumber = UInt(blockNumberStr, radix: 16) {
-                    print("Read single block, Recognized blockNumber: \(blockNumber)")
-                    (self.nfcController as! ST25DVReader).readSingleBlock(blockNumber: UInt8(blockNumber), completed: {
-                        (response: Data?, error: Error?) -> Void in
-                        self.performResponse(command: command, response: response, error: error)
-                    })
-                    return true
-                }
-
-            case "21":
-                print("Write single block")
-                if let startBlock = UInt8(array[10], radix: 16) {
-                        print("Recognized blockNumber: \(startBlock)")
-                    let prepared = array[11...].map({
-                        (n: String) -> UInt8 in
-                        return UInt8(n, radix: 16) ?? 0
-                    })
-
-                        (self.nfcController as! ST25DVReader).writeSingleBlock(blockNumber: startBlock, data: Data(prepared), completed: {
-                            (error: Error?) -> Void in
-                            self.performResponse(command: command, response: "00".data(using: .utf8)!, error: error)
+        if let commandCode = Int(array[1], radix: 16) {
+            switch commandCode {
+                case 0xA0, 0xA9:
+                    if let pointer = UInt(array.last ?? "00", radix: 16) {
+                        (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandCode, request: Data([UInt8(pointer)]), completed: {
+                            (response: Data?, error: Error?) -> Void in
+                            self.performResponse(command: command, response: response, error: error)
                         })
                         return true
-                }
-
-            case "23":
-                print("read multiples blocks")
-                if let numberOfBlocksStr = array.last, let numberOfBlocks = Int(numberOfBlocksStr, radix: 16), let startBlock = Int(array[array.count - 2], radix: 16) {
-                    print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks)")
-                    do {
-                        try (self.nfcController as! ST25DVReader).readMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, completed: {
-                            (response: [Data], error: Error?) -> Void in
-                            print("Response after read multiple blocks: \(response), error: \(error)")
-                            self.performArrayResponse(command: command, response: response, error: error)
-                        })
-                        return true
-
-                    } catch NfcCustomError.oldVersionError(let errorMessage) {
-                        print("Error: \(errorMessage)")
-                    } catch {
-                        print("Error: not recognized")
                     }
-                }
 
-            case "24":
-                print("write multiples blocks")
-                if let startBlock = Int(array[10], radix: 16), let numberOfBlocks = Int(array[11], radix: 16) {
-                    print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks), \(array[12...])")
-                    let prepared = array[12...].map({
-                        (n: String) -> UInt8 in
-//                        withUnsafeBytes(of: ) { Data($0) }
-                        UInt8(n, radix: 16) ?? 0
-                    })
-                    .chunked(into: 4)
-                    .map({
-                        (arr: [UInt8]) -> Data in
-                        Data(arr)
-                    })
-                    print("Prepared data: \(prepared)")
-                    do {
-                        try (self.nfcController as! ST25DVReader).writeMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, dataBlocks: prepared, completed: {
-                            (error: Error?) -> Void in
-                            self.performArrayResponse(command: command, response: ["00".data(using: .utf8)!], error: error)
+                case 0xA1:
+                    if let pointer = UInt(array.last ?? "00", radix: 16), let regValue = UInt(array[array.count - 2], radix: 16) {
+                        (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandCode, request: Data([UInt8(pointer), UInt8(regValue)]), completed: {
+                            (response: Data?, error: Error?) -> Void in
+                            self.performResponse(command: command, response: response, error: error)
                         })
                         return true
-
-                    } catch NfcCustomError.oldVersionError(let errorMessage) {
-                        print("Error: \(errorMessage)")
-                    } catch {
-                        print("Error: not recognized")
                     }
-                }
+
+                case 0x20:
+                    if let blockNumberStr = array.last, let blockNumber = UInt(blockNumberStr, radix: 16) {
+                        print("Read single block, Recognized blockNumber: \(blockNumber)")
+                        (self.nfcController as! ST25DVReader).readSingleBlock(blockNumber: UInt8(blockNumber), completed: {
+                            (response: Data?, error: Error?) -> Void in
+                            self.performResponse(command: command, response: response, error: error)
+                        })
+                        return true
+                    }
+
+                case 0x21:
+                    print("Write single block")
+                    if let startBlock = UInt8(array[10], radix: 16) {
+                            print("Recognized blockNumber: \(startBlock)")
+                        let prepared = array[11...].map({
+                            (n: String) -> UInt8 in
+                            return UInt8(n, radix: 16) ?? 0
+                        })
+
+                            (self.nfcController as! ST25DVReader).writeSingleBlock(blockNumber: startBlock, data: Data(prepared), completed: {
+                                (error: Error?) -> Void in
+                                self.performResponse(command: command, response: "00".data(using: .utf8)!, error: error)
+                            })
+                            return true
+                    }
+
+                case 0x23:
+                    print("read multiples blocks")
+                    if let numberOfBlocksStr = array.last, let numberOfBlocks = Int(numberOfBlocksStr, radix: 16), let startBlock = Int(array[array.count - 2], radix: 16) {
+                        print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks)")
+                        do {
+                            try (self.nfcController as! ST25DVReader).readMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, completed: {
+                                (response: [Data], error: Error?) -> Void in
+                                print("Response after read multiple blocks: \(response), error: \(error)")
+                                self.performArrayResponse(command: command, response: response, error: error)
+                            })
+                            return true
+
+                        } catch NfcCustomError.oldVersionError(let errorMessage) {
+                            print("Error: \(errorMessage)")
+                        } catch {
+                            print("Error: not recognized")
+                        }
+                    }
+
+                case 0x24:
+                    print("write multiples blocks")
+                    if let startBlock = Int(array[10], radix: 16), let numberOfBlocks = Int(array[11], radix: 16) {
+                        print("Recognized startBlock: \(startBlock), numberOfBlocks: \(numberOfBlocks), \(array[12...])")
+                        let prepared = array[12...].map({
+                            (n: String) -> UInt8 in
+                            UInt8(n, radix: 16) ?? 0
+                        })
+                        .chunked(into: 4)
+                        .map({
+                            (arr: [UInt8]) -> Data in
+                            Data(arr)
+                        })
+                        print("Prepared data: \(prepared)")
+                        do {
+                            try (self.nfcController as! ST25DVReader).writeMultipleBlocks(from: startBlock, numberOfBlocks: numberOfBlocks, dataBlocks: prepared, completed: {
+                                (error: Error?) -> Void in
+                                self.performArrayResponse(command: command, response: ["00".data(using: .utf8)!], error: error)
+                            })
+                            return true
+
+                        } catch NfcCustomError.oldVersionError(let errorMessage) {
+                            print("Error: \(errorMessage)")
+                        } catch {
+                            print("Error: not recognized \(error)")
+                        }
+                    }
 
 
-            default:
-                return false
+                default:
+                    return false
 
+            }
         }
 
         return false

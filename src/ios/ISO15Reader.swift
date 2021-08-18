@@ -4,6 +4,9 @@ import Cordova
 import Cordova
 import Cordova
 import Cordova
+import Cordova
+import Cordova
+import Cordova
 //
 //  IOS15Reader.swift
 //  NFC
@@ -257,12 +260,10 @@ extension ST25DVReader {
             return;
         }
 
-        var parameters  = Data( bytes:[request.count - 1], count: 1 )
-        parameters.append(request)
-        print( "Send - \(parameters.hexEncodedString())" )
+        print( "Send Custom Command [\(command)] - \(request.hexEncodedString())" )
         tag.customCommand(requestFlags: [.highDataRate],
                           customCommandCode: command,
-            customRequestParameters:  parameters,
+            customRequestParameters:  request,
             completionHandler: completed)
 
     }
