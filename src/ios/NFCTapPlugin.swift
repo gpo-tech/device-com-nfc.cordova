@@ -150,6 +150,7 @@ import CoreNFC
         DispatchQueue.main.async {
             if error != nil {
                 self.lastError = error
+                print(error)
                 self.sendError(command: command, result: error!.localizedDescription)
             } else {
                 print("responded \(response!.hexEncodedString())")
@@ -235,6 +236,19 @@ import CoreNFC
                             })
                             return true
                     }
+
+                case 0xB3:
+                    print("Present Password")
+                    let prepared = array[10...].map({
+                        (n: String) -> UInt8 in
+                        return UInt8(n, radix: 16) ?? 0
+                    })
+
+                    (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandCode, request: Data(prepared), completed: {
+                        (response: Data?, error: Error?) -> Void in
+                        self.performResponse(command: command, response: response, error: error)
+                    })
+                    return true
 
                 case 0x23:
                     print("read multiples blocks")

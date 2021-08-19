@@ -1,12 +1,4 @@
 import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
-import Cordova
 //
 //  IOS15Reader.swift
 //  NFC
