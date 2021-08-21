@@ -53,6 +53,7 @@ import CoreNFC
             status: CDVCommandStatus_ERROR,
             messageAs: result
         )
+        pluginResult!.setKeepCallbackAs(true)
         commandDelegate!.send(pluginResult, callbackId: command.callbackId)
     }
 
@@ -67,6 +68,12 @@ import CoreNFC
             if self.nfcController == nil {
                 self.nfcController = ST25DVReader()
             }
+
+//            if self.nfcController != nil {
+//                (self.nfcController as! ST25DVReader).invalidateSession(message: "Concurrent attempt")
+//                self.nfcController = nil
+//            }
+//            self.nfcController = ST25DVReader()
 
             (self.nfcController as! ST25DVReader).initSession(alertMessage: "Bring your phone close to the Tap.", completed: {
                 (error: Error?) -> Void in
@@ -153,8 +160,9 @@ import CoreNFC
                 print(error)
                 self.sendError(command: command, result: error!.localizedDescription)
             } else {
-                print("responded \(response!.hexEncodedString())")
-                self.sendSuccess(command: command, result: response!.hexEncodedString())
+                var preparedResponse = Data([0] + [UInt8](response!))
+                print("responded single \(preparedResponse.hexEncodedString())")
+                self.sendSuccess(command: command, result: preparedResponse.hexEncodedString())
             }
         }
     }
@@ -165,9 +173,9 @@ import CoreNFC
                 self.lastError = error
                 self.sendError(command: command, result: error!.localizedDescription)
             } else {
-                let respArray = flattenedArray(array: response)
+                let respArray = [0] + flattenedArray(array: response)
                 let respData = Data(bytes: respArray, count: respArray.count)
-                print("responded \(response) : \(respArray) : \(respData.hexEncodedString())")
+                print("responded array \(response) : \(respArray) : \(respData.hexEncodedString())")
                 self.sendSuccess(command: command, result: respData.hexEncodedString())
             }
         }
@@ -203,7 +211,7 @@ import CoreNFC
                     }
 
                 case 0xA1:
-                    if let pointer = UInt(array.last ?? "00", radix: 16), let regValue = UInt(array[array.count - 2], radix: 16) {
+                    if let regValue = UInt(array.last ?? "00", radix: 16), let pointer = UInt(array[array.count - 2], radix: 16) {
                         (self.nfcController as! ST25DVReader).sendCustomCommand(command: commandCode, request: Data([UInt8(pointer), UInt8(regValue)]), completed: {
                             (response: Data?, error: Error?) -> Void in
                             self.performResponse(command: command, response: response, error: error)
@@ -237,9 +245,9 @@ import CoreNFC
                             return true
                     }
 
-                case 0xB3:
+                case 0xB1, 0xB3:
                     print("Present Password")
-                    let prepared = array[10...].map({
+                    let prepared = array[11...].map({
                         (n: String) -> UInt8 in
                         return UInt8(n, radix: 16) ?? 0
                     })
@@ -291,9 +299,9 @@ import CoreNFC
                             return true
 
                         } catch NfcCustomError.oldVersionError(let errorMessage) {
-                            print("Error: \(errorMessage)")
+                            print("Error 1: \(errorMessage)")
                         } catch {
-                            print("Error: not recognized \(error)")
+                            print("Error 2: not recognized \(error)")
                         }
                     }
 

@@ -248,7 +248,7 @@ extension ST25DVReader {
         guard let tag = self.tag else {
             let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
             invalidateSession( message: error.localizedDescription  )
-            completed(nil, error )
+            completed(Data([99]), error )
             return;
         }
 
@@ -261,22 +261,46 @@ extension ST25DVReader {
     }
 
     func readSingleBlock(blockNumber: UInt8, completed: @escaping (Data?, Error?)->()) {
-        tag?.readSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, completionHandler: completed);
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(Data([99]), error )
+            return;
+        }
+        tag.readSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, completionHandler: completed);
     }
 
     func writeSingleBlock(blockNumber: UInt8, data: Data, completed: @escaping (Error?)->()) {
-        tag?.writeSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, dataBlock: data, completionHandler: completed)
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(error)
+            return;
+        }
+        tag.writeSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, dataBlock: data, completionHandler: completed)
     }
 
     func readMultipleBlocks(from: Int, numberOfBlocks: Int, completed: @escaping ([Data], Error?)->()) throws {
         guard #available(iOS 14.0, *) else {
             throw NfcCustomError.oldVersionError("Can not be used in iOS < 14.0")
         }
-        tag?.readMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSMakeRange(from, numberOfBlocks), completionHandler: completed)
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed([Data([99])], error )
+            return;
+        }
+        tag.readMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSMakeRange(from, numberOfBlocks), completionHandler: completed)
     }
 
     func writeMultipleBlocks(from: Int, numberOfBlocks: Int, dataBlocks: [Data], completed: @escaping (Error?)->()) {
-        tag?.writeMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: numberOfBlocks), dataBlocks: dataBlocks, completionHandler: completed)
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(error )
+            return;
+        }
+        tag.writeMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: numberOfBlocks), dataBlocks: dataBlocks, completionHandler: completed)
     }
 
     func readResponse( nbTry: Int, completed: @escaping (Data?, Error?)->() ) {
