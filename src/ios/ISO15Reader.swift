@@ -1,3 +1,4 @@
+import Cordova
 //
 //  IOS15Reader.swift
 //  NFC
@@ -11,7 +12,7 @@ import CoreNFC
 
 
 public extension String {
-    
+
      func dataFromHexString() -> Data {
         var bytes = [UInt8]()
         for i in 0..<(count/2) {
@@ -22,11 +23,11 @@ public extension String {
         }
         return Data(bytes: UnsafePointer<UInt8>(bytes), count:bytes.count)
     }
-    
+
 }
 
 extension Data {
-    
+
     func hexEncodedString() -> String {
         let format = "%02hhX"
         return map { String(format: format, $0) }.joined()
@@ -35,40 +36,40 @@ extension Data {
 
 @available(iOS 13.0, *)
 class ST25DVReader : NSObject {
-   
+
     typealias Completion = (Error?) -> ()
-    
+
     private var comSession: NFCTagReaderSession?
     private var tag: NFCISO15693Tag?
 
     static var   MB_CTRL_DYN : UInt8 = 0x0D
-    
+
     private var connectionCompleted :  Completion?
-    
+
     /*ST25 commands*/
     static var   ISO15693_CUSTOM_ST25DV_CMD_WRITE_MB_MSG : UInt8 =  0xAA;
     static var   ISO15693_CUSTOM_ST25DV_CMD_READ_MB_MSG_LENGTH : Int =  0xAB;
     static var   ISO15693_CUSTOM_ST25DV_CMD_READ_MB_MSG = 0xAC;
-    
+
     static var   ISO15693_CUSTOM_ST_CMD_READ_DYN_CONFIG : Int =  0xAD;
     static var   ISO15693_CUSTOM_ST_CMD_WRITE_DYN_CONFIG : Int = 0xAE;
 
     static var   DELAY : UInt32 = 1000;   // timeout resolution in millionths of second
     static var   NB_MAX_RETRY : Int = 50;
-    
+
     override init() {
         super.init()
     }
 
     func initSession( alertMessage: String, completed: @escaping (Error?)->() ) {
-        
+
         guard NFCNDEFReaderSession.readingAvailable else {
             completed( NFCReaderError( NFCReaderError.readerErrorUnsupportedFeature ))
             return
         }
-        
+
         connectionCompleted = completed
-        
+
         if NFCNDEFReaderSession.readingAvailable {
             comSession = NFCTagReaderSession(pollingOption: [.iso15693], delegate: self, queue: nil)
             comSession?.alertMessage = alertMessage
@@ -80,23 +81,23 @@ class ST25DVReader : NSObject {
         comSession?.alertMessage = message
         comSession?.invalidate()
     }
-    
+
     func send( request: String, completed: @escaping (Data?,Error?)->() ) {
-        
+
         guard NFCNDEFReaderSession.readingAvailable else {
             let error = NFCReaderError( NFCReaderError.readerErrorUnsupportedFeature )
             invalidateSession( message: error.localizedDescription )
             completed( nil, error )
             return
         }
-        
+
         guard comSession != nil && comSession!.isReady else {
             let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
             invalidateSession( message: error.localizedDescription )
             completed( nil, error )
             return
         }
-        
+
         let requestData : Data = request.dataFromHexString()
         print( "Transceive - \(requestData.hexEncodedString())" )
         transceive(request: requestData,
@@ -112,8 +113,8 @@ class ST25DVReader : NSObject {
                             }
                     })
     }
-    
-   
+
+
 }
 
 @available(iOS 13.0, *)
@@ -124,7 +125,7 @@ extension ST25DVReader : NFCTagReaderSessionDelegate {
         // At this point RF polling is enabled.
         print( "tagReaderSessionDidBecomeActive" )
     }
- 
+
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
        // If necessary, you may handle the error. Note session is no longer valid.
         // You must create a new session to restart RF polling.
@@ -147,11 +148,11 @@ extension ST25DVReader : NFCTagReaderSessionDelegate {
             })
             return
         }
-        
+
         guard let tag = tags.first else {
             return;
         }
-            
+
         switch tag {
         case .iso15693(let iso15tag):
             self.tag = iso15tag
@@ -161,13 +162,13 @@ extension ST25DVReader : NFCTagReaderSessionDelegate {
            connectionCompleted?(error)
            return;
         }
-     
+
         // Connect to tag
         session.connect(to: tag) { [weak self] (error: Error?) in
             guard let strongSelf = self  else {
                 return;
             }
-            
+
             if error != nil {
                 let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
                 strongSelf.invalidateSession( message: error.localizedDescription  )
@@ -182,11 +183,11 @@ extension ST25DVReader : NFCTagReaderSessionDelegate {
 
 @available(iOS 13.0, *)
 extension ST25DVReader {
-    
-    
+
+
 
     func transceive(request: Data, completed: @escaping (Data?, Error?)->()){
-       
+
 
         checkMBEnabled( completed: { ( error: Error?) in
                 if nil != error {
@@ -206,7 +207,7 @@ extension ST25DVReader {
                         completed(response, nil)
                     })
             })
-    
+
     }
 
     func sendRequest(request: Data, nbTry: Int, completed: @escaping (Data?, Error?)->() ) {
@@ -223,7 +224,7 @@ extension ST25DVReader {
             completed(nil, error )
             return
         }
-        
+
         var parameters  = Data( bytes:[request.count - 1], count: 1 )
         parameters.append(request)
         print( "Send - \(parameters.hexEncodedString())" )
@@ -239,18 +240,78 @@ extension ST25DVReader {
                     usleep(ST25DVReader.DELAY * 10) // free ST25DV for SPI
                     self.readResponse( nbTry: nbTry , completed: completed)
             })
-        
+
     }
-    
+
+
+    func sendCustomCommand(command: Int, request: Data, completed: @escaping (Data?, Error?)->() ) {
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(Data([99]), error )
+            return;
+        }
+
+        print( "Send Custom Command [\(command)] - \(request.hexEncodedString())" )
+        tag.customCommand(requestFlags: [.highDataRate],
+                          customCommandCode: command,
+            customRequestParameters:  request,
+            completionHandler: completed)
+
+    }
+
+    func readSingleBlock(blockNumber: UInt8, completed: @escaping (Data?, Error?)->()) {
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(Data([99]), error )
+            return;
+        }
+        tag.readSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, completionHandler: completed);
+    }
+
+    func writeSingleBlock(blockNumber: UInt8, data: Data, completed: @escaping (Error?)->()) {
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(error)
+            return;
+        }
+        tag.writeSingleBlock(requestFlags: [.highDataRate], blockNumber: blockNumber, dataBlock: data, completionHandler: completed)
+    }
+
+    func readMultipleBlocks(from: Int, numberOfBlocks: Int, completed: @escaping ([Data], Error?)->()) throws {
+        guard #available(iOS 14.0, *) else {
+            throw NfcCustomError.oldVersionError("Can not be used in iOS < 14.0")
+        }
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed([Data([99])], error )
+            return;
+        }
+        tag.readMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSMakeRange(from, numberOfBlocks), completionHandler: completed)
+    }
+
+    func writeMultipleBlocks(from: Int, numberOfBlocks: Int, dataBlocks: [Data], completed: @escaping (Error?)->()) {
+        guard let tag = self.tag else {
+            let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
+            invalidateSession( message: error.localizedDescription  )
+            completed(error )
+            return;
+        }
+        tag.writeMultipleBlocks(requestFlags: [.highDataRate], blockRange: NSRange.init(location: from, length: numberOfBlocks), dataBlocks: dataBlocks, completionHandler: completed)
+    }
+
     func readResponse( nbTry: Int, completed: @escaping (Data?, Error?)->() ) {
-        
+
         guard let tag = self.tag else {
             let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
             invalidateSession( message: error.localizedDescription  )
             completed( nil, error )
             return;
         }
-        
+
         //We have tried enough timeout and return
         if (nbTry <= 0){
             print( "Read Abandonned" )
@@ -259,9 +320,9 @@ extension ST25DVReader {
             completed( nil, error )
             return;
         }
-        
+
         print( "Read \(nbTry)" )
-  
+
         //check Mailbox
         tag.customCommand(requestFlags: [.highDataRate],
                           customCommandCode: 0xAD,
@@ -272,9 +333,9 @@ extension ST25DVReader {
                                 self.readResponse( nbTry: nbTry - 1, completed: completed )
                                 return
                             }
-                            
+
                             print( "Read resonse" )
-                            
+
                             if ( (response.count >= 1) && ( (response[0]&0x1) != 0 ) && ( (response[0]&0x2) != 0  )){
 
                                 print( "Read Value - \(Data(response).hexEncodedString())" )
@@ -291,18 +352,18 @@ extension ST25DVReader {
                                                     completed(response,nil)
                                                     return
                                 })
-                               
+
                             }
                             else {
                                 usleep(ST25DVReader.DELAY)
                                 self.readResponse( nbTry: nbTry - 1, completed: completed )
                             }
-                        
+
             })
-        
-        
+
+
     }
-    
+
     func checkMBEnabled(completed: @escaping (Error?)->()) {
         guard let tag = self.tag else {
             let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagNotConnected )
@@ -310,7 +371,7 @@ extension ST25DVReader {
              completed( error )
             return;
         }
-        
+
         //Read Config
         tag.customCommand(requestFlags: [.highDataRate],
             customCommandCode: 0xAD,
@@ -321,7 +382,7 @@ extension ST25DVReader {
                     completed(error)
                     return
                 }
-            
+
                 if ( response.count == 0) {
                     let error = NFCReaderError( NFCReaderError.readerTransceiveErrorTagResponseError )
                     self.invalidateSession( message: error.localizedDescription  )
@@ -329,12 +390,12 @@ extension ST25DVReader {
                     return
                 }
 
-                
+
                 let current = response[0];
-                
+
                 //We should reset mailbox
                 if ( (current != 0x41) && (current != 0x81) ) {
-            
+
                     //disable
                     tag.customCommand(requestFlags: [.highDataRate],
                         customCommandCode: 0xAE,
@@ -345,7 +406,7 @@ extension ST25DVReader {
                                 completed( error )
                                 return
                             }
-                            
+
                             //enable
                             tag.customCommand(requestFlags: [.highDataRate],
                                 customCommandCode: 0xAE,
@@ -356,7 +417,7 @@ extension ST25DVReader {
                                         completed( error )
                                         return
                                     }
-                                  
+
                                     completed(nil)
                                     return
 
@@ -369,8 +430,11 @@ extension ST25DVReader {
                     completed(nil)
                     return
                 }
-                
+
             })
     }
 }
-    
+
+enum NfcCustomError: Error {
+    case oldVersionError(String)
+}

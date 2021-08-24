@@ -7,17 +7,17 @@
 import CoreNFC
 
 extension AppDelegate {
-    
-    override open func application(_ application: UIApplication,
+
+    open func application(_ application: UIApplication,
                      continue userActivity: NSUserActivity,
                      restorationHandler: @escaping ([Any]?) -> Void) -> Bool {
-        
+
         NSLog("Extending UIApplicationDelegate")
-        
+
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb else {
             return false
         }
-        
+
         // Confirm that the NSUserActivity object contains a valid NDEF message.
         if #available(iOS 12.0, *) {
             let ndefMessage = userActivity.ndefMessagePayload
@@ -28,7 +28,7 @@ extension AppDelegate {
             let nfcPluginInstance: NfcPlugin = self.viewController.getCommandInstance("NfcPlugin") as! NfcPlugin
             var resolved: Bool = false;
             NSLog(nfcPluginInstance.debugDescription);
-            
+
             DispatchQueue.global().async {
                 let waitingTimeInterval: Double = 0.1;
                 print("<NFC> Did start timeout")
